@@ -35,7 +35,8 @@ def custom_score(game, player):
         The heuristic value of the current game state to the specified player.
     """
 
-    # Score based on player open moves minus opponent open moves
+    # Score based on current player open moves - oponent open moves + custom_socre_3 which gives a float from 0 to 1 based on distance to center
+
     if game.is_loser(player):
         return float("-inf")
 
@@ -44,7 +45,7 @@ def custom_score(game, player):
 
     own_moves = len(game.get_legal_moves(player))
     opp_moves = len(game.get_legal_moves(game.get_opponent(player)))
-    return float(own_moves - opp_moves)
+    return float(own_moves - opp_moves)+custom_score_3(game, player)
 
 
 def custom_score_2(game, player):
@@ -70,7 +71,7 @@ def custom_score_2(game, player):
         The heuristic value of the current game state to the specified player.
     """
 
-    # Score based on distance from player to the center of the board
+    # Score based on current player open moves + custom_socre_3 which gives a float from 0 to 1 based on distance to center
 
     if game.is_loser(player):
         return float("-inf")
@@ -78,9 +79,7 @@ def custom_score_2(game, player):
     if game.is_winner(player):
         return float("inf")
 
-    w, h = game.width / 2., game.height / 2.
-    y, x = game.get_player_location(player)
-    return float((h - y)**2 + (w - x)**2)
+    return float(len(game.get_legal_moves(player)))+custom_score_3(game, player)
 
 
 def custom_score_3(game, player):
@@ -106,7 +105,7 @@ def custom_score_3(game, player):
         The heuristic value of the current game state to the specified player.
     """
 
-    #Score based on player open moves
+    # Score based on distance to center, returns float between 0 and 1
 
     if game.is_loser(player):
         return float("-inf")
@@ -114,7 +113,10 @@ def custom_score_3(game, player):
     if game.is_winner(player):
         return float("inf")
 
-    return float(len(game.get_legal_moves(player)))
+    w, h = game.width / 2., game.height / 2.
+    y, x = game.get_player_location(player)
+    return 1-(float((h - y)**2 + (w - x)**2) / (w**2 + h**2))
+
 
 
 class IsolationPlayer:
@@ -197,6 +199,10 @@ class MinimaxPlayer(IsolationPlayer):
         # Return the best move from the last completed search iteration
         return best_move
 
+    def check_time(self):
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
+
     def minimax(self, game, depth):
         """Implement depth-limited minimax search algorithm as described in
         the lectures.
@@ -242,6 +248,7 @@ class MinimaxPlayer(IsolationPlayer):
         move = (-1, -1)
         max_value = float("-inf")
 
+        # does a minimax search using the max_value function passing the max depth
         if len(legal_moves) > 0:
             for m in legal_moves:
                 temp_value = self.min_value(game.forecast_move(m), depth-1)
@@ -252,38 +259,54 @@ class MinimaxPlayer(IsolationPlayer):
         return move
 
     def min_value(self, game, depth):
+        """
+        Gets the min value from its possible positions
+        
+        :param game: the game or forcasted game
+        :param depth: the depth to explore from this point on
+        :return score: the score based on self.score
+        """
         self.check_time()
 
+        # Checked the  depth first to save some computing time by calling game.get_legal_moves() only if necessary
         if depth > 0:
             legal_moves = game.get_legal_moves()
             if len(legal_moves) > 0:
+                # continue search
                 score = min([self.max_value(game.forecast_move(m), depth-1) for m in legal_moves])
             else:
+                # end game
                 score = self.score(game, self)
         else:
+            # reached depth limit so this is a leaf and so it should return its own score
             score = self.score(game, self)
 
         return score
 
     def max_value(self, game, depth):
+        """
+        Gets the max value from its possible positions
+        
+        :param game: the game or forcasted game
+        :param depth: the depth to explore from this point on
+        :return score: the score based on self.score
+        """
         self.check_time()
 
+        # Checked the  depth first to save some computing time by calling game.get_legal_moves() only if necessary
         if depth > 0:
             legal_moves = game.get_legal_moves()
             if len(legal_moves) > 0:
+                # continue search
                 score = max([self.min_value(game.forecast_move(m), depth-1) for m in legal_moves])
             else:
+                # end game
                 score = self.score(game, self)
         else:
+            # reached depth limit so this is a leaf and so it should return its own score
             score = self.score(game, self)
 
         return score
-
-    def check_time(self):
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise SearchTimeout()
-
-
 
 
 class AlphaBetaPlayer(IsolationPlayer):
@@ -325,14 +348,23 @@ class AlphaBetaPlayer(IsolationPlayer):
         self.time_left = time_left
 
         legal_moves = game.get_legal_moves()
-        move = (-1, -1)
         depth = 0
+        move = (-1, -1)
 
+        # Iterate until SearchTimeOut is rasied and return last found value
         if len(legal_moves) > 0:
-            for depth in range(self.search_depth):
-                move = self.alphabeta(game, depth)
+            for depth in range(0, 99999999999999999999999999):
+                try:
+                    move = self.alphabeta(game, depth)
+                except SearchTimeout:
+                    break
+
 
         return move
+
+    def check_time(self):
+        if self.time_left() < self.TIMER_THRESHOLD:
+            raise SearchTimeout()
 
     def alphabeta(self, game, depth, alpha=float("-inf"), beta=float("inf")):
         """Implement depth-limited minimax search with alpha-beta pruning as
@@ -383,61 +415,78 @@ class AlphaBetaPlayer(IsolationPlayer):
 
         legal_moves = game.get_legal_moves()
         move = (-1, -1)
-        max_value = float("-inf")
-
-        '''
-            PROPAGATE BACK APLHAP BETA VALUES
-        '''
+        score = float("-inf")
 
         if len(legal_moves) > 0:
             for m in legal_moves:
-                temp_value, alpha, beta = self.min_value(game.forecast_move(m), alpha, beta, depth-1)
-                if temp_value > max_value:
-                    max_value = temp_value
+                temp_score = self.min_value(game.forecast_move(m), alpha, beta, depth-1)
+                if temp_score > score:
+                    score = temp_score
+                    alpha = max(alpha, score)
                     move = m
 
         return move
 
+
     def min_value(self, game, alpha, beta, depth):
+        """
+        Gets the min value from its possible positions
+        
+        :param game: the game or forcasted game
+        :param depth: the depth to explore from this point on
+        :return score: the score based on self.score
+        """
         self.check_time()
 
         score = float("inf")
 
+        # Checked the  depth first to save some computing time by calling game.get_legal_moves() only if necessary
         if depth > 0:
             legal_moves = game.get_legal_moves()
             if len(legal_moves) > 0:
                 for m in legal_moves:
-                    score, alpha, beta = min([self.max_value(game.forecast_move(m), alpha, beta, depth - 1) for m in legal_moves])
+                    # continue search
+                    score = min(score, self.max_value(game.forecast_move(m), alpha, beta, depth - 1))
                     if score <= alpha:
-                        return score, alpha, beta
+                        return score
                     beta = min(beta, score)
             else:
+                # end game reached
                 score = self.score(game, self)
         else:
+            # reached depth limit so this is a leaf and so it should return its own score
             score = self.score(game, self)
 
-        return score, alpha, beta
+        return score
 
     def max_value(self, game, alpha, beta, depth):
+        """
+        Gets the max value from its possible positions
+        
+        :param game: the game or forcasted game
+        :param depth: the depth to explore from this point on
+        :return score: the score based on self.score
+        """
         self.check_time()
 
         score = float("-inf")
 
+        # Checked the  depth first to save some computing time by calling game.get_legal_moves() only if necessary
         if depth > 0:
             legal_moves = game.get_legal_moves()
             if len(legal_moves) > 0:
                 for m in legal_moves:
-                    score, alpha, beta = max([self.min_value(game.forecast_move(m), alpha, beta, depth - 1) for m in legal_moves])
+                    # continue search
+                    score = max(score, self.min_value(game.forecast_move(m), alpha, beta, depth - 1))
                     if score >= beta:
-                        return score, alpha, beta
+                        return score
                     alpha = max(alpha, score)
             else:
+                # end game reached
                 score = self.score(game, self)
         else:
+            # reached depth limit so this is a leaf and so it should return its own score
             score = self.score(game, self)
 
-        return score, alpha, beta
+        return score
 
-    def check_time(self):
-        if self.time_left() < self.TIMER_THRESHOLD:
-            raise SearchTimeout()
